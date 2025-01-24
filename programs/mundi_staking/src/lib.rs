@@ -1,16 +1,29 @@
 use anchor_lang::prelude::*;
 use anchor_spl::associated_token::AssociatedToken;
 use anchor_spl::token::{self, Mint, Token, TokenAccount, Transfer};
-use std::str::FromStr;
-// Program ID
-declare_id!("stakeybcqbvVC9wxpLmjen7yqNdTBrWaRfiEEj43oMR");
+// use std::str::FromStr;
 
+// On chain address "mundi...98Qq" owns this program
+// This below program Vanity address Nicholai found on his cluster
+
+// BEGIN FREEZE: DO NOT CHANGE until the `// END FREEZE:` comment
+
+// Program ID
+declare_id!("mundi2P4tJmSUTg9DMA93NCX25RcKmDmrFU86z9xnV2");
+
+// END FREEZE:
+
+// Market cap unlock declaration
 const UNLOCK_MARKET_CAP: u64 = 450_000_000; // $450M in USD
 
-const STAKING_START_TIME: i64 = 1633024800; // Timestamp of start
-const STAKING_END_TIME: i64 = 1633111200; // Timestamp of ending of staking
-const UNSTAKING_START_TIME: i64 = 1633197600; // Unstaking start time, Easter
-const UNSTAKING_END_TIME: i64 = 1633284000; // Unstaling end time, infinite
+// Timestamp of ending of staking Georgian EASTER Apr 20 2025 GMT
+// .. because we want to give people as much time until the end of "easter"
+const STAKING_END_TIME: i64 = 1_745_197_200;
+
+// Possible first date of unstaking... same time but maybe we extend to the future
+const UNSTAKING_START_TIME: i64 = 1_745_197_200; // Unstaking start time, Easter Apr 20 2025 GMT
+
+// Random testing notes....
 
 // $ spl-token create-token
 // Creating token FeEucpirJWULUQwgwoiDJxzwoN7tMWFLTXEaupgSt8F3
@@ -21,19 +34,19 @@ const UNSTAKING_END_TIME: i64 = 1633284000; // Unstaling end time, infinite
 // lib.rs
 
 // Signature: 52dnNwh3JnV7WSpKGCB5pAFowEfL5MY7hJp8FY56HDGsU2hWXSdDEotgZhvy3urkyXRyZFqDDNj79SGxhXTEfEjs
-// [115, 116, 97, 107]
+// Seed 1 of Stake Account [115, 116, 97, 107]
 
-// Bigger question - Harold: At $450M what happens
-// Benny - 20% of your extra coins at another level
+// Bigger question - Harold: At $450M what happens [USER needs to unstake to get their rewards]
+// Benny - 20% of your extra coins at another level [NAH]
 // Harold:  What are the rewards that we want to put behind
-//          -- how do they calculate the yield
-//          -- You can stake until easter, TODO: implement this yield
-//          -- Progress Bar for staking, that had the milestones
+//          -- how do they calculate the yield [DONE] ~Weighted percentage or rewards cap total~ ~Possible people can't get rewards if they're too late..~
+//          -- You can stake until easter, TODO: implement this yield [DONE]
+//          -- Progress Bar for staking, that had the milestones [DONE]
 //
 //      TODO:
-//          1/ Add a stake rewards pool bar
-//          2/ Add logic to ensure people can't stake and unstake to take rewards (stake open time. destake close time.)
-//          3/ Add logic to ensure staking / unstaking is a one time thing
+//          1/ Add a stake rewards pool bar [x]
+//          2/ Add logic to ensure people can't stake and unstake to take rewards (stake open time. destake close time.) [x]
+//          3/ Add logic to ensure staking / unstaking is a one time thing [x]
 
 #[program]
 pub mod token_staking {
@@ -54,7 +67,8 @@ pub mod token_staking {
         stake_account.lock_duration = lock_duration;
         stake_account.locked_at = Clock::get()?.unix_timestamp;
         stake_account.unlocked = false;
-        stake_account.staked_amount = 0; // Initialize staked amount
+        stake_account.staked_amount = 0u64; // Initialize staked amount
+        stake_account.last_check = 0u64;
         // msg!("This is a log message");
         Ok(())
     }
@@ -81,6 +95,7 @@ pub mod token_staking {
         // msg!("Stake amount provided: {}", amount);
 
         let stake_account = &mut ctx.accounts.stake_account;
+        let rewards_account = &mut ctx.accounts.rewards_account;
         // msg!("Stake account address: {}", stake_account.key());
 
         // Verify the stake token account matches the one in stake_account
@@ -120,6 +135,10 @@ pub mod token_staking {
             .checked_add(amount)
             .ok_or(StakingError::NumericOverflow)?;
         // msg!("Staked amount updated to: {}", stake_account.staked_amount);
+        rewards_account.total_staked = rewards_account
+            .total_staked
+            .checked_add(amount)
+            .ok_or(StakingError::NumericOverflow)?;
 
         // msg!("Exiting stake_tokens function successfully");
         Ok(())
@@ -138,8 +157,8 @@ pub mod token_staking {
         // Calculate market cap with overflow protection
         let market_cap = (oracle_account.price as f64) * (mint.supply as f64);
         // msg!(
-            // "Calculated raw market cap (before division): {}",
-            // market_cap
+        // "Calculated raw market cap (before division): {}",
+        // market_cap
         // );
         // .checked_mul(mint.supply as f64)
         // .ok_or(StakingError::NumericOverflow)?;
@@ -176,6 +195,7 @@ pub mod token_staking {
         let current_time = Clock::get()?.unix_timestamp;
         let market_cap = stake_account.last_check;
         let rewards_account = &mut ctx.accounts.rewards_account;
+        let rewards_token_account = &mut ctx.accounts.rewards_token_account;
 
         // Check both time lock and market cap conditions
         require!(
@@ -197,14 +217,14 @@ pub mod token_staking {
         );
 
         // Determine reward rate based on market cap
-        let reward_rate = if market_cap >= 1_000_000_000 {
-            0.05
+        let reward_rate: u64 = if market_cap >= 1_000_000_000 {
+            5
         } else if market_cap >= 750_000_000 {
-            0.02
+            2
         } else if market_cap >= 500_000_000 {
-            0.01
+            1
         } else {
-            0.0
+            0
         };
 
         // // Get stake account PDA signer
@@ -213,23 +233,70 @@ pub mod token_staking {
             ctx.program_id,
         );
 
+        let binding = ctx.accounts.mint.key();
+        let mintkey = binding.as_ref();
+
+        let (_pda, reward_bump) = Pubkey::find_program_address(
+            &[b"reward", ctx.accounts.mint.key().as_ref()],
+            ctx.program_id,
+        );
+
         // let stake_account_bump = ctx.bumps["stake_account"];
         // PDA seeds for signer
         let seeds = &[b"stak", ctx.accounts.owner.key.as_ref(), &[bump]];
         let signer_seeds = &[&seeds[..]];
+
+        let reward_seeds = &[b"reward", mintkey, &[reward_bump]];
+        let reward_signer_seeds = &[&reward_seeds[..]];
 
         // let total_staked_amount: u64 = rewards_account.total_donations;
         // Calculating the users's reward amount
         let mut remaining_amount: u64 = ctx.accounts.stake_token_account.amount; // User's remaining amount
         let staked_amount = ctx.accounts.stake_token_account.amount;
 
-        if (reward_rate > 0.00) {
-            let rewards_pool: u64 = rewards_account.total_rewards;
-            let user_reward = staked_amount.checked_div()
-            .ok_or(StakingError::NumericOverflow)?
-            ;
+        // Here are the total rewards in the token account
+        let total_rewards: u64 = rewards_token_account.amount;
 
+        // Here we calculate the lower value, the fee percentage of the rewards account or the rest remaining in the rewards account
+        // Calculate the reward amount based on the reward rate
+        let reward_amount = if reward_rate > 0 {
+            staked_amount
+                .checked_mul(reward_rate)
+                .ok_or(StakingError::NumericOverflow)?
+                .checked_div(100)
+                .ok_or(StakingError::NumericOverflow)?
+        } else {
+            0
+        };
+        // [TODO]: Add the program reward signer seeds here to get the proper signer
+        //
+        if reward_amount > 0 {
+            // Calculate the amount to transfer, which is the minimum of the reward amount and the total rewards
+            let transfer_amount = std::cmp::min(reward_amount, total_rewards);
+            msg!("Calculated Rewards {}", reward_amount);
+            msg!("Actual Reward {}", transfer_amount);
+            // Transfer the calculated amount from the rewards token account to the user
+            let cpi_accounts = Transfer {
+                from: rewards_token_account.to_account_info(),
+                to: ctx.accounts.to_token_account.to_account_info(),
+                authority: rewards_account.to_account_info(),
+            };
+
+            let cpi_program = ctx.accounts.token_program.to_account_info();
+            let cpi_ctx =
+                CpiContext::new_with_signer(cpi_program, cpi_accounts, reward_signer_seeds);
+            token::transfer(cpi_ctx, transfer_amount)?;
+            rewards_account.distributed_rewards += transfer_amount;
+            rewards_account.total_rewards -= transfer_amount;
         }
+        // Update the remaining amount after transfer
+        // remaining_amount -= transfer_amount;
+
+        // Update the stake account's staked amount
+        // stake_account.staked_amount = remaining_amount;
+
+        // msg!("Transferred {} tokens to the user", transfer_amount);
+        // msg!("Remaining staked amount: {}", remaining_amount);
 
         // Check for the existence of the fee account, if it exists, then send the fee (tip)
         if let Some(fee_account) = &ctx.accounts.fee_collector {
@@ -308,8 +375,8 @@ pub mod token_staking {
         let mint = &ctx.accounts.mint;
         let payer = &mut ctx.accounts.payer;
         let token_program = &ctx.accounts.token_program;
-        let associated_token_program = &ctx.accounts.associated_token_program;
-        let system_program = &ctx.accounts.system_program;
+        // let associated_token_program = &ctx.accounts.associated_token_program;
+        // let system_program = &ctx.accounts.system_program;
 
         // Ensure the user_token_account is associated with the correct mint
         require!(
@@ -345,7 +412,6 @@ pub mod token_staking {
         Ok(())
     }
 }
-
 
 #[derive(Accounts)]
 pub struct DonateToRewards<'info> {
@@ -388,11 +454,14 @@ pub struct InitializeOracle<'info> {
     #[account(
         init, 
         payer = authority, 
+        seeds = [b"oracle", mint.key().as_ref()],
+        bump,
         space = 8 + 8 + 32
     )]
     pub oracle_account: Account<'info, CustomOracleAccount>,
     #[account(mut)]
     pub authority: Signer<'info>,
+    pub mint: Account<'info, Mint>,
     pub system_program: Program<'info, System>,
 }
 
@@ -451,6 +520,13 @@ pub struct StakeTokens<'info> {
 
     #[account(
         mut,
+        seeds = [b"reward", mint.key().as_ref()],
+        bump,
+    )]
+    pub rewards_account: Account<'info, RewardsAccount>,
+
+    #[account(
+        mut,
         constraint = from_token_account.owner == owner.key(),
         constraint = from_token_account.mint == mint.key()
     )]
@@ -491,6 +567,14 @@ pub struct UnstakeTokens<'info> {
     )]
     pub rewards_account: Account<'info, RewardsAccount>,
 
+    // Added so that we can distribute rewards from the unstake action
+    #[account(
+        mut,
+        associated_token::mint = mint, 
+        associated_token::authority = rewards_account,
+    )]
+    pub rewards_token_account: Account<'info, TokenAccount>,
+
     #[account(
         mut,
         constraint = to_token_account.owner == owner.key(),
@@ -530,7 +614,7 @@ pub struct StakeAccount {
     pub locked_at: i64,
     pub lock_duration: i64,
     pub unlocked: bool,
-    pub last_check: u64 // Market cap last checked at
+    pub last_check: u64, // Market cap last checked at
 }
 
 #[account]
@@ -553,12 +637,18 @@ impl RewardsAccount {
 
 #[derive(Accounts)]
 pub struct UpdatePrice<'info> {
-    #[account(mut)]
+    #[account(
+        mut,
+        constraint = oracle_account.authority == authority.key(),
+        seeds = [b"oracle", mint.key().as_ref()],
+        bump
+    )]
     pub oracle_account: Account<'info, CustomOracleAccount>,
     #[account(
         constraint = authority.key() == oracle_account.authority @ StakingError::Unauthorized
     )]
     pub authority: Signer<'info>,
+    pub mint: Account<'info, Mint>,
 }
 
 impl StakeAccount {
@@ -582,5 +672,5 @@ pub enum StakingError {
     #[msg("The staking period has ended")]
     TooLateToStake,
     #[msg("The un-staking period has not begun yet (after orthodox easter 2025)")]
-    TooEarlyToUnStake
+    TooEarlyToUnStake,
 }
