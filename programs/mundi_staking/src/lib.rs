@@ -287,7 +287,7 @@ pub mod token_staking {
                                 .ok_or(StakingError::NumericOverflow)?
                                 .checked_div(67)
                                 .ok_or(StakingError::NumericOverflow)?;
-            msg!("Congrats! You won the lotter!");
+            msg!("Congrats! You won the lottery!");
             msg!("If you're in the first 67 peoplem you'll get the prize");
             rewards_account.distributed_rewards += 1;
         }
