@@ -25,29 +25,6 @@ const UNSTAKING_START_TIME: i64 = 1_745_197_200; // Unstaking start time, Easter
 
 // Random testing notes....
 
-// $ spl-token create-token
-// Creating token FeEucpirJWULUQwgwoiDJxzwoN7tMWFLTXEaupgSt8F3
-
-// Address:  FeEucpirJWULUQwgwoiDJxzwoN7tMWFLTXEaupgSt8F3
-// Decimals:  9
-
-// lib.rs
-
-// Signature: 52dnNwh3JnV7WSpKGCB5pAFowEfL5MY7hJp8FY56HDGsU2hWXSdDEotgZhvy3urkyXRyZFqDDNj79SGxhXTEfEjs
-// Seed 1 of Stake Account [115, 116, 97, 107]
-
-// Bigger question - Harold: At $450M what happens [USER needs to unstake to get their rewards]
-// Benny - 20% of your extra coins at another level [NAH]
-// Harold:  What are the rewards that we want to put behind
-//          -- how do they calculate the yield [DONE] ~Weighted percentage or rewards cap total~ ~Possible people can't get rewards if they're too late..~
-//          -- You can stake until easter, TODO: implement this yield [DONE]
-//          -- Progress Bar for staking, that had the milestones [DONE]
-//
-//      TODO:
-//          1/ Add a stake rewards pool bar [x]
-//          2/ Add logic to ensure people can't stake and unstake to take rewards (stake open time. destake close time.) [x]
-//          3/ Add logic to ensure staking / unstaking is a one time thing [x]
-
 #[program]
 pub mod token_staking {
     // use std::f32::MIN;
