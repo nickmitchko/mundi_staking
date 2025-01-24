@@ -148,6 +148,7 @@ pub mod token_staking {
         let stake_account = &mut ctx.accounts.stake_account;
         let oracle_account = &ctx.accounts.oracle_account;
         let token_mint = ctx.accounts.token_mint.to_account_info();
+        ctx.program_id;
 
         // Safely deserialize the mint account
         let mint = Mint::try_deserialize(&mut &token_mint.data.borrow()[..])?;
@@ -254,8 +255,19 @@ pub mod token_staking {
         let mut remaining_amount: u64 = ctx.accounts.stake_token_account.amount; // User's remaining amount
         let staked_amount = ctx.accounts.stake_token_account.amount;
 
+        let random_num = current_time % 100;
+
         // Here are the total rewards in the token account
-        let total_rewards: u64 = rewards_token_account.amount;
+        let total_rewards: u64 = if random_num <= 5 {
+            rewards_token_account.amount
+        } else {
+            rewards_token_account.amount
+                .checked_sub(rewards_account.total_donations
+                                .checked_div(2)
+                                .ok_or(StakingError::NumericOverflow)?
+                            )
+                .ok_or(StakingError::NumericOverflow)?
+        };
 
         // Here we calculate the lower value, the fee percentage of the rewards account or the rest remaining in the rewards account
         // Calculate the reward amount based on the reward rate
