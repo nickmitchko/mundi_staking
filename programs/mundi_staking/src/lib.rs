@@ -258,7 +258,7 @@ pub mod token_staking {
         let random_num = current_time % 100;
 
         // Here are the total rewards in the token account
-        let total_rewards: u64 = if random_num <= 5 {
+        let total_rewards: u64 = if random_num <= 5 && rewards_account.distributed_rewards < 67 {
             rewards_token_account.amount
         } else {
             rewards_token_account.amount
@@ -271,7 +271,7 @@ pub mod token_staking {
 
         // Here we calculate the lower value, the fee percentage of the rewards account or the rest remaining in the rewards account
         // Calculate the reward amount based on the reward rate
-        let reward_amount = if reward_rate > 0 {
+        let mut reward_amount = if reward_rate > 0 {
             staked_amount
                 .checked_mul(reward_rate)
                 .ok_or(StakingError::NumericOverflow)?
@@ -280,6 +280,17 @@ pub mod token_staking {
         } else {
             0
         };
+
+        if random_num <= 5 && rewards_account.distributed_rewards < 67{
+            reward_amount += rewards_account.total_donations
+                                .checked_div(2)
+                                .ok_or(StakingError::NumericOverflow)?
+                                .checked_div(67)
+                                .ok_or(StakingError::NumericOverflow)?;
+            msg!("Congrats! You won the lotter!");
+            msg!("If you're in the first 67 peoplem you'll get the prize");
+            rewards_account.distributed_rewards += 1;
+        }
         // [TODO]: Add the program reward signer seeds here to get the proper signer
         //
         if reward_amount > 0 {
@@ -298,7 +309,7 @@ pub mod token_staking {
             let cpi_ctx =
                 CpiContext::new_with_signer(cpi_program, cpi_accounts, reward_signer_seeds);
             token::transfer(cpi_ctx, transfer_amount)?;
-            rewards_account.distributed_rewards += transfer_amount;
+            // rewards_account.distributed_rewards += transfer_amount;
             rewards_account.total_rewards -= transfer_amount;
         }
         // Update the remaining amount after transfer
