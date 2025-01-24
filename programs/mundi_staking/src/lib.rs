@@ -24,6 +24,21 @@ const STAKING_END_TIME: i64 = 1_745_197_200;
 const UNSTAKING_START_TIME: i64 = 1_745_197_200; // Unstaking start time, Easter Apr 20 2025 GMT
 
 // Random testing notes....
+#[cfg(not(feature = "no-entrypoint"))]
+use solana_security_txt::security_txt;
+ 
+#[cfg(not(feature = "no-entrypoint"))]
+security_txt! {
+    name: "Flip Mundi",
+    project_url: "https://flipmundi.com",
+    contacts: "email:nickmitchko@gmail.com",
+    policy: "https://github.com/nickmitchko/mundi_staking/security.txt",
+ 
+    // Optional Fields
+    preferred_languages: "en",
+    source_code: "https://github.com/nickmitchko/mundi_staking",
+    acknowledgements: "Thank you to our bug bounty hunters!"
+}
 
 #[program]
 pub mod token_staking {
