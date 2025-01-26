@@ -210,12 +210,13 @@ pub mod token_staking {
         );
 
         // Determine reward rate based on market cap
+        // Removed as switch to give away system.
         let reward_rate: u64 = if market_cap >= 1_000_000_000 {
-            5
+            0
         } else if market_cap >= 750_000_000 {
-            2
+            0
         } else if market_cap >= 500_000_000 {
-            1
+            0
         } else {
             0
         };
@@ -273,14 +274,14 @@ pub mod token_staking {
             0
         };
 
-        if random_num <= 5 && rewards_account.distributed_rewards < 67{
+        if random_num <= 5 && rewards_account.distributed_rewards < 67 {
             reward_amount += rewards_account.total_donations
-                                .checked_div(2)
+                                .checked_div(1)
                                 .ok_or(StakingError::NumericOverflow)?
                                 .checked_div(67)
                                 .ok_or(StakingError::NumericOverflow)?;
             msg!("Congrats! You won the lottery!");
-            msg!("If you're in the first 67 peoplem you'll get the prize");
+            msg!("If you're in the first 67 people you'll get the prize");
             rewards_account.distributed_rewards += 1;
         }
         // [TODO]: Add the program reward signer seeds here to get the proper signer
