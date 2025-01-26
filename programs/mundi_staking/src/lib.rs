@@ -186,9 +186,9 @@ pub mod token_staking {
     pub fn unstake_tokens(ctx: Context<UnstakeTokens>) -> Result<()> {
         let stake_account = &mut ctx.accounts.stake_account;
         let current_time = Clock::get()?.unix_timestamp;
-        let market_cap = stake_account.last_check;
-        let rewards_account = &mut ctx.accounts.rewards_account;
-        let rewards_token_account = &mut ctx.accounts.rewards_token_account;
+        let _market_cap = stake_account.last_check;
+        let _rewards_account = &mut ctx.accounts.rewards_account;
+        let _rewards_token_account = &mut ctx.accounts.rewards_token_account;
 
         // Check both time lock and market cap conditions
         require!(
@@ -209,17 +209,6 @@ pub mod token_staking {
             StakingError::InvalidTokenAccount
         );
 
-        // Determine reward rate based on market cap
-        // Removed as switch to give away system.
-        let reward_rate: u64 = if market_cap >= 1_000_000_000 {
-            0
-        } else if market_cap >= 750_000_000 {
-            0
-        } else if market_cap >= 500_000_000 {
-            0
-        } else {
-            0
-        };
 
         // // Get stake account PDA signer
         let (_pda, bump) = Pubkey::find_program_address(
@@ -228,9 +217,9 @@ pub mod token_staking {
         );
 
         let binding = ctx.accounts.mint.key();
-        let mintkey = binding.as_ref();
+        let _mintkey = binding.as_ref();
 
-        let (_pda, reward_bump) = Pubkey::find_program_address(
+        let (_pda, _reward_bump) = Pubkey::find_program_address(
             &[b"reward", ctx.accounts.mint.key().as_ref()],
             ctx.program_id,
         );
@@ -240,79 +229,9 @@ pub mod token_staking {
         let seeds = &[b"stak", ctx.accounts.owner.key.as_ref(), &[bump]];
         let signer_seeds = &[&seeds[..]];
 
-        let reward_seeds = &[b"reward", mintkey, &[reward_bump]];
-        let reward_signer_seeds = &[&reward_seeds[..]];
-
-        // let total_staked_amount: u64 = rewards_account.total_donations;
-        // Calculating the users's reward amount
         let mut remaining_amount: u64 = ctx.accounts.stake_token_account.amount; // User's remaining amount
         let staked_amount = ctx.accounts.stake_token_account.amount;
 
-        let random_num = current_time % 100;
-
-        // Here are the total rewards in the token account
-        let total_rewards: u64 = if random_num <= 5 && rewards_account.distributed_rewards < 67 {
-            rewards_token_account.amount
-        } else {
-            rewards_token_account.amount
-                .checked_sub(rewards_account.total_donations
-                                .checked_div(2)
-                                .ok_or(StakingError::NumericOverflow)?
-                            )
-                .ok_or(StakingError::NumericOverflow)?
-        };
-
-        // Here we calculate the lower value, the fee percentage of the rewards account or the rest remaining in the rewards account
-        // Calculate the reward amount based on the reward rate
-        let mut reward_amount = if reward_rate > 0 {
-            staked_amount
-                .checked_mul(reward_rate)
-                .ok_or(StakingError::NumericOverflow)?
-                .checked_div(100)
-                .ok_or(StakingError::NumericOverflow)?
-        } else {
-            0
-        };
-
-        if random_num <= 5 && rewards_account.distributed_rewards < 67 {
-            reward_amount += rewards_account.total_donations
-                                .checked_div(1)
-                                .ok_or(StakingError::NumericOverflow)?
-                                .checked_div(67)
-                                .ok_or(StakingError::NumericOverflow)?;
-            msg!("Congrats! You won the lottery!");
-            msg!("If you're in the first 67 people you'll get the prize");
-            rewards_account.distributed_rewards += 1;
-        }
-        // [TODO]: Add the program reward signer seeds here to get the proper signer
-        //
-        if reward_amount > 0 {
-            // Calculate the amount to transfer, which is the minimum of the reward amount and the total rewards
-            let transfer_amount = std::cmp::min(reward_amount, total_rewards);
-            msg!("Calculated Rewards {}", reward_amount);
-            msg!("Actual Reward {}", transfer_amount);
-            // Transfer the calculated amount from the rewards token account to the user
-            let cpi_accounts = Transfer {
-                from: rewards_token_account.to_account_info(),
-                to: ctx.accounts.to_token_account.to_account_info(),
-                authority: rewards_account.to_account_info(),
-            };
-
-            let cpi_program = ctx.accounts.token_program.to_account_info();
-            let cpi_ctx =
-                CpiContext::new_with_signer(cpi_program, cpi_accounts, reward_signer_seeds);
-            token::transfer(cpi_ctx, transfer_amount)?;
-            // rewards_account.distributed_rewards += transfer_amount;
-            rewards_account.total_rewards -= transfer_amount;
-        }
-        // Update the remaining amount after transfer
-        // remaining_amount -= transfer_amount;
-
-        // Update the stake account's staked amount
-        // stake_account.staked_amount = remaining_amount;
-
-        // msg!("Transferred {} tokens to the user", transfer_amount);
-        // msg!("Remaining staked amount: {}", remaining_amount);
 
         // Check for the existence of the fee account, if it exists, then send the fee (tip)
         if let Some(fee_account) = &ctx.accounts.fee_collector {
@@ -361,14 +280,9 @@ pub mod token_staking {
         let cpi_ctx = CpiContext::new_with_signer(cpi_program, cpi_accounts, signer_seeds);
         // msg!("Executing token transfer CPI");
         token::transfer(cpi_ctx, remaining_amount)?;
-        // msg!("Token transfer successful");
 
-        // stake_account.owner = ctx.accounts.owner.key();
-        // stake_account.token_account = ctx.accounts.token_account.key();
-        // stake_account.lock_duration = lock_duration;
-        // stake_account.locked_at = Clock::get()?.unix_timestamp;
         stake_account.unlocked = false;
-        stake_account.staked_amount = 0; // Initialize staked amount
+        stake_account.staked_amount = 0;
 
         Ok(())
     }
