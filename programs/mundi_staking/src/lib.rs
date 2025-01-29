@@ -38,6 +38,8 @@ security_txt! {
     preferred_languages: "en",
     source_code: "https://github.com/nickmitchko/mundi_staking",
     acknowledgements: "Thank you to our bug bounty hunters!"
+
+    
 }
 
 #[program]
